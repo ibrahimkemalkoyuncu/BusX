@@ -1,9 +1,9 @@
 using BusX.Core.DTOs;
+using BusX.Core.Entities;
 using BusX.Core.Interfaces;
 using BusX.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using BusX.Core.Entities;
 
 namespace BusX.Infrastructure.Services
 {
@@ -20,28 +20,37 @@ namespace BusX.Infrastructure.Services
             _strategies = strategies;
         }
 
+        // 1. SEFER ARAMA (Akıllı Tarih Filtreli) 🧠
         public async Task<List<JourneyDto>> SearchJourneysAsync(int fromId, int toId, DateTime date)
         {
-            // 1. Cache Key Oluştur (Örn: "Journey_1_2_2025-11-29")
+            // Cache Key
             string cacheKey = $"Journey_{fromId}_{toId}_{date:yyyy-MM-dd}";
 
-            // 2. Cache Kontrolü
+            // Cache'de yoksa veya süre dolduysa
             if (!_cache.TryGetValue(cacheKey, out List<JourneyDto>? journeys))
             {
-                // Cache'de yoksa Veritabanına git 🐢
-                var query = await _context.Journeys
+                // Sorguyu Hazırla
+                var query = _context.Journeys
                     .Include(j => j.FromStation)
                     .Include(j => j.ToStation)
-                    .Where(j => j.FromStationId == fromId && 
-                                j.ToStationId == toId && 
-                                j.Departure.Date == date.Date &&
-                                j.Departure > DateTime.UtcNow) // Geçmiş seferleri getirme kuralı
-                    .ToListAsync();
+                    .Where(j => j.FromStationId == fromId &&
+                                j.ToStationId == toId &&
+                                j.Departure >= date.Date &&
+                                j.Departure < date.Date.AddDays(1)); // O günün tamamı
 
-                // Entity -> DTO Dönüşümü ve Fiyat Hesaplama
-                journeys = query.Select(j =>
+                // ⚡ DÜZELTME BURADA:
+                // Eğer aranan tarih BUGÜN ise, şu anki saatten (UtcNow) öncekileri gizle!
+                if (date.Date == DateTime.UtcNow.Date)
                 {
-                    // İlgili Provider'ın stratejisini bul
+                    query = query.Where(j => j.Departure > DateTime.UtcNow);
+                }
+
+                // Sıralama ve Çalıştırma
+                var resultEntities = await query.OrderBy(j => j.Departure).ToListAsync();
+
+                // Entity -> DTO Dönüşümü
+                journeys = resultEntities.Select(j =>
+                {
                     var strategy = _strategies.FirstOrDefault(s => s.ProviderName == j.ProviderName);
                     decimal finalPrice = strategy != null ? strategy.CalculatePrice(j.BasePrice) : j.BasePrice;
 
@@ -57,67 +66,60 @@ namespace BusX.Infrastructure.Services
                     };
                 }).ToList();
 
-                // 3. Cache'e Yaz (60 Saniye TTL - İster Gereği)
-                var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(60));
-
+                // Cache Ayarları (60 sn)
+                var cacheOptions = new MemoryCacheEntryOptions().SetAbsoluteExpiration(TimeSpan.FromSeconds(60));
                 _cache.Set(cacheKey, journeys, cacheOptions);
             }
 
             return journeys ?? new List<JourneyDto>();
         }
 
+        // 2. SEFER DETAYI
         public async Task<JourneyDto?> GetJourneyByIdAsync(int id)
         {
-             // Detay sayfasını şu an cachelemiyoruz (Basitlik için)
-             var j = await _context.Journeys
-                    .Include(j => j.FromStation)
-                    .Include(j => j.ToStation)
-                    .FirstOrDefaultAsync(x => x.Id == id);
-            
-             if (j == null) return null;
+            var j = await _context.Journeys
+                   .Include(j => j.FromStation)
+                   .Include(j => j.ToStation)
+                   .FirstOrDefaultAsync(x => x.Id == id);
 
-             var strategy = _strategies.FirstOrDefault(s => s.ProviderName == j.ProviderName);
-             decimal finalPrice = strategy != null ? strategy.CalculatePrice(j.BasePrice) : j.BasePrice;
+            if (j == null) return null;
 
-             return new JourneyDto
-             {
-                 Id = j.Id,
-                 FromCity = j.FromStation.City,
-                 ToCity = j.ToStation.City,
-                 Departure = j.Departure,
-                 ArrivalEstimate = j.ArrivalEstimate,
-                 ProviderName = j.ProviderName,
-                 Price = finalPrice
-             };
+            var strategy = _strategies.FirstOrDefault(s => s.ProviderName == j.ProviderName);
+            decimal finalPrice = strategy != null ? strategy.CalculatePrice(j.BasePrice) : j.BasePrice;
+
+            return new JourneyDto
+            {
+                Id = j.Id,
+                FromCity = j.FromStation.City,
+                ToCity = j.ToStation.City,
+                Departure = j.Departure,
+                ArrivalEstimate = j.ArrivalEstimate,
+                ProviderName = j.ProviderName,
+                Price = finalPrice
+            };
         }
 
-        #region  Koltukları Getir
+        // 3. KOLTUK PLANI (Travego 2+1)
         public async Task<List<SeatDto>> GetSeatPlanAsync(int journeyId)
         {
-            // 1. Önce sefer var mı diye bak
             var journey = await _context.Journeys.FindAsync(journeyId);
             if (journey == null) return new List<SeatDto>();
 
-            // 2. Bu seferin koltukları DB'de var mı?
             var seats = await _context.Seats
                 .Where(s => s.JourneyId == journeyId)
                 .OrderBy(s => s.SeatNumber)
                 .ToListAsync();
 
-            // 3. Eğer hiç koltuk yoksa (İlk kez tıklanıyorsa), OTOMATİK OLUŞTUR!
             if (!seats.Any())
             {
                 seats = GenerateFakeSeats(journeyId);
                 _context.Seats.AddRange(seats);
-                await _context.SaveChangesAsync(); // Veritabanına kaydet
+                await _context.SaveChangesAsync();
             }
 
-            // 4. Stratejiye göre fiyatı hesapla
             var strategy = _strategies.FirstOrDefault(s => s.ProviderName == journey.ProviderName);
             decimal finalPrice = strategy != null ? strategy.CalculatePrice(journey.BasePrice) : journey.BasePrice;
 
-            // 5. Entity -> DTO Dönüşümü
             return seats.Select(s => new SeatDto
             {
                 Id = s.Id,
@@ -127,122 +129,76 @@ namespace BusX.Infrastructure.Services
                 Type = s.Type,
                 IsSold = s.IsSold,
                 GenderLock = s.GenderLock,
-                Price = finalPrice // Her koltuk aynı fiyat (şimdilik)
+                Price = finalPrice
             }).ToList();
         }
 
-        // Sahte Koltuk Fabrikası (2+1 Otobüs Düzeni)
+        // 4. TRAVEGO DÜZENİ OLUŞTURUCU
         private List<Seat> GenerateFakeSeats(int journeyId)
         {
             var seats = new List<Seat>();
-            int seatNumber = 1;
-
-            // 10 Sıra koltuk olsun
-            for (int row = 1; row <= 10; row++)
+            void AddSeat(int number, int row, int col, int type)
             {
-                // Sol taraf (Tekli Koltuk - Cam Kenarı)
-                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = seatNumber++, Row = row, Column = 1, Type = 2, RowVersion = Array.Empty<byte>() });
-
-                // Sağ taraf (İkili Koltuk)
-                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = seatNumber++, Row = row, Column = 3, Type = 0, RowVersion = Array.Empty<byte>() }); // Koridor
-                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = seatNumber++, Row = row, Column = 4, Type = 1, RowVersion = Array.Empty<byte>() }); // Cam Kenarı
+                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = number, Row = row, Column = col, Type = type, RowVersion = Array.Empty<byte>() });
             }
 
+            // A. ÖN BÖLÜM (1-6)
+            for (int r = 1; r <= 6; r++)
+            {
+                int baseNum = 1 + (r - 1) * 3;
+                AddSeat(baseNum, r, 1, 2); AddSeat(baseNum + 1, r, 4, 0); AddSeat(baseNum + 2, r, 5, 1);
+            }
+            // B. KAPI ÖNÜ (7)
+            AddSeat(19, 7, 1, 2); AddSeat(22, 7, 4, 0); AddSeat(23, 7, 5, 1);
+            // C. KAPI HİZASI (8-9 Sol)
+            AddSeat(20, 8, 1, 2); AddSeat(21, 9, 1, 2);
+            // D. ARKA BÖLÜM (10-13)
+            int cR = 10; int[] lS = { 24, 27, 30, 33 };
+            foreach (var l in lS) { AddSeat(l, cR, 1, 2); AddSeat(l + 1, cR, 4, 0); AddSeat(l + 2, cR, 5, 1); cR++; }
+            // E. EN ARKA (14 Sağ)
+            AddSeat(37, 14, 4, 0); AddSeat(38, 14, 5, 1);
             return seats;
         }
-        #endregion
 
-
-    // ... Önceki kodlar (GenerateFakeSeats metodunun altına ekle)
-
+        // 5. BİLET SATIŞ
         public async Task<TicketResultDto> SellTicketsAsync(CreateTicketDto request)
         {
-            // 1. Validasyonlar
-            if (request.Seats.Count > 4)
-                return new TicketResultDto { Success = false, Message = "Aynı anda en fazla 4 koltuk alabilirsiniz." };
-
+            if (request.Seats.Count > 4) return new TicketResultDto { Success = false, Message = "Max 4 koltuk." };
             using var transaction = await _context.Database.BeginTransactionAsync();
-
             try
             {
                 var journey = await _context.Journeys.FindAsync(request.JourneyId);
-                if (journey == null) return new TicketResultDto { Success = false, Message = "Sefer bulunamadı." };
+                if (journey == null) return new TicketResultDto { Success = false, Message = "Sefer yok." };
 
                 foreach (var seatReq in request.Seats)
                 {
-                    // Koltuğu bul
                     var seat = await _context.Seats.FindAsync(seatReq.SeatId);
-                    if (seat == null) 
-                        return new TicketResultDto { Success = false, Message = $"Koltuk ({seatReq.SeatId}) bulunamadı." };
+                    if (seat == null || seat.IsSold) return new TicketResultDto { Success = false, Message = "Koltuk müsait değil." };
+                    if (seat.GenderLock.HasValue && seat.GenderLock != seatReq.Gender) return new TicketResultDto { Success = false, Message = "Cinsiyet uyuşmazlığı." };
 
-                    // Kontrol 1: Zaten satılmış mı?
-                    if (seat.IsSold)
-                        return new TicketResultDto { Success = false, Message = $"Koltuk {seat.SeatNumber} zaten satılmış." };
-
-                    // Kontrol 2: Cinsiyet Kuralı (Basit versiyon: Yan koltuk kontrolü eklenebilir)
-                    if (seat.GenderLock.HasValue && seat.GenderLock != seatReq.Gender)
-                        return new TicketResultDto { Success = false, Message = $"Koltuk {seat.SeatNumber} sadece {(seat.GenderLock == 1 ? "Erkek" : "Kadın")} yolcu içindir." };
-
-                    // ⚡ KRİTİK NOKTA: Güncelleme
                     seat.IsSold = true;
-                    seat.GenderLock = seatReq.Gender; // Satılınca o cinsiyete kilitlenir
-                    
-                    // SQLite Hilesi: RowVersion'ı manuel değiştiriyoruz ki EF Core farkı anlasın.
-                    // MSSQL olsa buna gerek kalmazdı.
-                    seat.RowVersion = Guid.NewGuid().ToByteArray(); 
+                    seat.GenderLock = seatReq.Gender;
+                    seat.RowVersion = Guid.NewGuid().ToByteArray(); // SQLite Concurrency
 
-                    // Bileti Oluştur
-                    var ticket = new Ticket
+                    _context.Tickets.Add(new Ticket
                     {
                         JourneyId = request.JourneyId,
                         SeatId = seat.Id,
                         PassengerName = seatReq.PassengerName,
                         PassengerTc = seatReq.PassengerTc,
                         PassengerGender = seatReq.Gender,
-                        PaidAmount = journey.BasePrice, // Şimdilik düz fiyat
-                        Pnr = GeneratePNR()
-                    };
-
-                    _context.Tickets.Add(ticket);
+                        PaidAmount = journey.BasePrice,
+                        Pnr = Guid.NewGuid().ToString().Substring(0, 6).ToUpper()
+                    });
                 }
 
-                // 2. Mock Ödeme (%10 Hata Simülasyonu)
-                if (!MockPaymentService())
-                {
-                    return new TicketResultDto { Success = false, Message = "Ödeme alınamadı (Yetersiz Bakiye)." };
-                }
+                if (new Random().Next(100) < 10) return new TicketResultDto { Success = false, Message = "Ödeme Başarısız (Mock)." };
 
-                // 3. Veritabanına Kaydet (Concurrency Kontrolü Burada Yapılır)
                 await _context.SaveChangesAsync();
-                
                 await transaction.CommitAsync();
-
-                return new TicketResultDto { Success = true, Message = "İşlem Başarılı", Pnr = "PNR-" + new Random().Next(10000,99999) };
+                return new TicketResultDto { Success = true, Message = "İşlem Başarılı", Pnr = "PNR-SUCCESS" };
             }
-            catch (DbUpdateConcurrencyException)
-            {
-                // ⚡⚡⚡ BİRİ BİZDEN ÖNCE DAVRANDI! ⚡⚡⚡
-                await transaction.RollbackAsync();
-                return new TicketResultDto { Success = false, Message = "Seçtiğiniz koltuklardan biri işlem sırasında başkası tarafından satın alındı. Lütfen tekrar deneyin." };
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                return new TicketResultDto { Success = false, Message = "Hata: " + ex.Message };
-            }
+            catch { await transaction.RollbackAsync(); return new TicketResultDto { Success = false, Message = "Çakışma: Koltuk başkası tarafından alındı." }; }
         }
-
-        // Yardımcı Metotlar
-        private bool MockPaymentService()
-        {
-            // %90 Başarılı, %10 Başarısız
-            return new Random().Next(100) > 10;
-        }
-
-        private string GeneratePNR()
-        {
-            return Guid.NewGuid().ToString().Substring(0, 6).ToUpper();
-        }
-
     }
 }
