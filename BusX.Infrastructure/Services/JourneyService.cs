@@ -3,6 +3,7 @@ using BusX.Core.Interfaces;
 using BusX.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using BusX.Core.Entities;
 
 namespace BusX.Infrastructure.Services
 {
@@ -90,5 +91,67 @@ namespace BusX.Infrastructure.Services
                  Price = finalPrice
              };
         }
+
+        #region  Koltukları Getir
+        public async Task<List<SeatDto>> GetSeatPlanAsync(int journeyId)
+        {
+            // 1. Önce sefer var mı diye bak
+            var journey = await _context.Journeys.FindAsync(journeyId);
+            if (journey == null) return new List<SeatDto>();
+
+            // 2. Bu seferin koltukları DB'de var mı?
+            var seats = await _context.Seats
+                .Where(s => s.JourneyId == journeyId)
+                .OrderBy(s => s.SeatNumber)
+                .ToListAsync();
+
+            // 3. Eğer hiç koltuk yoksa (İlk kez tıklanıyorsa), OTOMATİK OLUŞTUR!
+            if (!seats.Any())
+            {
+                seats = GenerateFakeSeats(journeyId);
+                _context.Seats.AddRange(seats);
+                await _context.SaveChangesAsync(); // Veritabanına kaydet
+            }
+
+            // 4. Stratejiye göre fiyatı hesapla
+            var strategy = _strategies.FirstOrDefault(s => s.ProviderName == journey.ProviderName);
+            decimal finalPrice = strategy != null ? strategy.CalculatePrice(journey.BasePrice) : journey.BasePrice;
+
+            // 5. Entity -> DTO Dönüşümü
+            return seats.Select(s => new SeatDto
+            {
+                Id = s.Id,
+                SeatNumber = s.SeatNumber,
+                Row = s.Row,
+                Column = s.Column,
+                Type = s.Type,
+                IsSold = s.IsSold,
+                GenderLock = s.GenderLock,
+                Price = finalPrice // Her koltuk aynı fiyat (şimdilik)
+            }).ToList();
+        }
+
+        // Sahte Koltuk Fabrikası (2+1 Otobüs Düzeni)
+        private List<Seat> GenerateFakeSeats(int journeyId)
+        {
+            var seats = new List<Seat>();
+            int seatNumber = 1;
+
+            // 10 Sıra koltuk olsun
+            for (int row = 1; row <= 10; row++)
+            {
+                // Sol taraf (Tekli Koltuk - Cam Kenarı)
+                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = seatNumber++, Row = row, Column = 1, Type = 2, RowVersion = Array.Empty<byte>() });
+
+                // Sağ taraf (İkili Koltuk)
+                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = seatNumber++, Row = row, Column = 3, Type = 0, RowVersion = Array.Empty<byte>() }); // Koridor
+                seats.Add(new Seat { JourneyId = journeyId, SeatNumber = seatNumber++, Row = row, Column = 4, Type = 1, RowVersion = Array.Empty<byte>() }); // Cam Kenarı
+            }
+
+            return seats;
+        }
+        #endregion
+
+
     }
 }

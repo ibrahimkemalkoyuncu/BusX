@@ -40,6 +40,17 @@ namespace BusX.API.Controllers
             if (journey == null) return NotFound("Sefer bulunamadı.");
             return Ok(journey);
         }
+
+
+        // GET: api/journeys/1/seats
+        [HttpGet("{id}/seats")]
+        public async Task<IActionResult> GetSeats(int id)
+        {
+            var seats = await _journeyService.GetSeatPlanAsync(id);
+            if (seats == null || !seats.Any()) return NotFound("Koltuk planı bulunamadı.");
+
+            return Ok(seats);
+        }
     }
 }
 
