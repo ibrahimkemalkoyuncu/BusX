@@ -2,29 +2,30 @@
 
 Atlas Yazılım için geliştirilen, yüksek performanslı, ölçeklenebilir ve eşzamanlılık (concurrency) sorunlarını çözen modern bir otobüs biletleme altyapısıdır.
 
-## 🚀 Proje Durumu: Modül 3 Tamamlandı (Satış & Concurrency)
-Şu anki sürüm **"Modül 3"** olup, aşağıdaki kritik özellikleri içerir:
+## 🚀 Proje Durumu: Modül 4 Tamamlandı (Backend Bitti)
+Backend geliştirmesi tamamlanmış olup, proje şu yeteneklere sahiptir:
 
 ### 🏗️ Mimari & Teknolojiler
 * **.NET 8 Web API:** Backend motoru.
 * **Clean Architecture:** Core, Infrastructure ve API katmanlı yapı.
 * **SQLite & EF Core:** Veritabanı ve ORM.
-* **Optimistic Concurrency Control:** Aynı koltuğun aynı anda iki kişiye satılmasını önleyen kilit mekanizması (`RowVersion`).
-* **Transaction Management:** Satış ve ödeme işlemlerinin atomik (ya hep ya hiç) olarak yönetilmesi.
-* **Lazy Loading Pattern:** Koltuklar dinamik oluşturulur.
-* **Strategy Pattern:** Sağlayıcı bazlı fiyatlandırma.
+* **Serilog & Structured Logging:** Dosya tabanlı, yapısal loglama sistemi.
+* **Correlation ID:** Her isteğin benzersiz bir kimlikle (GUID) uçtan uca takibi.
+* **Health Checks:** Sistem ve veritabanı sağlık durumu izleme.
+* **Optimistic Concurrency Control:** Çifte rezervasyon engelleme.
+* **Lazy Loading & Strategy Patterns:** Performans ve esneklik desenleri.
 
 ### 🔌 Endpoint'ler
 | Metot | URL | Açıklama |
 |-------|-----|----------|
-| `GET` | `/api/journeys` | Şehirler arası sefer arama (Cache destekli). |
-| `GET` | `/api/journeys/{id}` | Sefer detayını getirme. |
-| `GET` | `/api/journeys/{id}/seats` | Seferin anlık koltuk durumunu (Dolu/Boş) getirir. |
-| `POST` | `/api/tickets/checkout` | **(Yeni)** Güvenli bilet satışı. Eşzamanlılık kontrolü ve Mock ödeme içerir. |
+| `GET` | `/api/journeys` | Sefer arama (Cache destekli). |
+| `GET` | `/api/journeys/{id}/seats` | Seferin anlık koltuk durumu. |
+| `POST` | `/api/tickets/checkout` | Güvenli bilet satışı (Concurrency Korumalı). |
+| `GET` | `/health` | **(Yeni)** Sistem sağlık kontrolü (Status: Healthy). |
 
-### 🧪 Test Senaryoları
-* **Mock Ödeme:** %10 ihtimalle ödeme reddedilir (402 Payment Required).
-* **Çifte Rezervasyon:** Aynı koltuğa aynı anda gelen isteklerden sadece biri başarılı olur, diğeri reddedilir (409 Conflict).
+### 🔍 Gözlemlenebilirlik
+* **Loglar:** `BusX.API/logs` klasöründe günlük olarak tutulur.
+* **İzleme:** Her HTTP yanıtı `X-Correlation-Id` başlığı içerir.
 
 ---
 
@@ -42,8 +43,8 @@ Atlas Yazılım için geliştirilen, yüksek performanslı, ölçeklenebilir ve 
     ```bash
     dotnet run --project BusX.API/BusX.API.csproj
     ```
-4.  Swagger Arayüzü:
-    `http://localhost:5XXX/swagger` adresinden API'yi test edebilirsiniz.
+4.  Swagger: `http://localhost:5XXX/swagger`
+5.  Health Check: `http://localhost:5XXX/health`
 
 ---
 **Geliştirici:** İbrahim Kemal Koyuncu
