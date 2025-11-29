@@ -7,7 +7,10 @@ namespace BusX.Core.Interfaces
         Task<List<JourneyDto>> SearchJourneysAsync(int fromId, int toId, DateTime date);
         Task<JourneyDto?> GetJourneyByIdAsync(int id);
 
-        //Koltukları Getir
+        // Koltukları Getir
         Task<List<SeatDto>> GetSeatPlanAsync(int journeyId);
+
+        // Bilet Satışı
+        Task<TicketResultDto> SellTicketsAsync(CreateTicketDto request);
     }
 }

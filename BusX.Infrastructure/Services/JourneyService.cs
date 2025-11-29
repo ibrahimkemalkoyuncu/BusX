@@ -153,5 +153,96 @@ namespace BusX.Infrastructure.Services
         #endregion
 
 
+    // ... Önceki kodlar (GenerateFakeSeats metodunun altına ekle)
+
+        public async Task<TicketResultDto> SellTicketsAsync(CreateTicketDto request)
+        {
+            // 1. Validasyonlar
+            if (request.Seats.Count > 4)
+                return new TicketResultDto { Success = false, Message = "Aynı anda en fazla 4 koltuk alabilirsiniz." };
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var journey = await _context.Journeys.FindAsync(request.JourneyId);
+                if (journey == null) return new TicketResultDto { Success = false, Message = "Sefer bulunamadı." };
+
+                foreach (var seatReq in request.Seats)
+                {
+                    // Koltuğu bul
+                    var seat = await _context.Seats.FindAsync(seatReq.SeatId);
+                    if (seat == null) 
+                        return new TicketResultDto { Success = false, Message = $"Koltuk ({seatReq.SeatId}) bulunamadı." };
+
+                    // Kontrol 1: Zaten satılmış mı?
+                    if (seat.IsSold)
+                        return new TicketResultDto { Success = false, Message = $"Koltuk {seat.SeatNumber} zaten satılmış." };
+
+                    // Kontrol 2: Cinsiyet Kuralı (Basit versiyon: Yan koltuk kontrolü eklenebilir)
+                    if (seat.GenderLock.HasValue && seat.GenderLock != seatReq.Gender)
+                        return new TicketResultDto { Success = false, Message = $"Koltuk {seat.SeatNumber} sadece {(seat.GenderLock == 1 ? "Erkek" : "Kadın")} yolcu içindir." };
+
+                    // ⚡ KRİTİK NOKTA: Güncelleme
+                    seat.IsSold = true;
+                    seat.GenderLock = seatReq.Gender; // Satılınca o cinsiyete kilitlenir
+                    
+                    // SQLite Hilesi: RowVersion'ı manuel değiştiriyoruz ki EF Core farkı anlasın.
+                    // MSSQL olsa buna gerek kalmazdı.
+                    seat.RowVersion = Guid.NewGuid().ToByteArray(); 
+
+                    // Bileti Oluştur
+                    var ticket = new Ticket
+                    {
+                        JourneyId = request.JourneyId,
+                        SeatId = seat.Id,
+                        PassengerName = seatReq.PassengerName,
+                        PassengerTc = seatReq.PassengerTc,
+                        PassengerGender = seatReq.Gender,
+                        PaidAmount = journey.BasePrice, // Şimdilik düz fiyat
+                        Pnr = GeneratePNR()
+                    };
+
+                    _context.Tickets.Add(ticket);
+                }
+
+                // 2. Mock Ödeme (%10 Hata Simülasyonu)
+                if (!MockPaymentService())
+                {
+                    return new TicketResultDto { Success = false, Message = "Ödeme alınamadı (Yetersiz Bakiye)." };
+                }
+
+                // 3. Veritabanına Kaydet (Concurrency Kontrolü Burada Yapılır)
+                await _context.SaveChangesAsync();
+                
+                await transaction.CommitAsync();
+
+                return new TicketResultDto { Success = true, Message = "İşlem Başarılı", Pnr = "PNR-" + new Random().Next(10000,99999) };
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // ⚡⚡⚡ BİRİ BİZDEN ÖNCE DAVRANDI! ⚡⚡⚡
+                await transaction.RollbackAsync();
+                return new TicketResultDto { Success = false, Message = "Seçtiğiniz koltuklardan biri işlem sırasında başkası tarafından satın alındı. Lütfen tekrar deneyin." };
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return new TicketResultDto { Success = false, Message = "Hata: " + ex.Message };
+            }
+        }
+
+        // Yardımcı Metotlar
+        private bool MockPaymentService()
+        {
+            // %90 Başarılı, %10 Başarısız
+            return new Random().Next(100) > 10;
+        }
+
+        private string GeneratePNR()
+        {
+            return Guid.NewGuid().ToString().Substring(0, 6).ToUpper();
+        }
+
     }
 }
