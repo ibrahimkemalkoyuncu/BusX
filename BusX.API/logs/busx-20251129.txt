@@ -1,0 +1,67 @@
+2025-11-29 15:44:25.424 +03:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "name" = '__EFMigrationsHistory' AND "type" = 'table';
+2025-11-29 15:44:25.490 +03:00 [INF] Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "name" = '__EFMigrationsHistory' AND "type" = 'table';
+2025-11-29 15:44:25.508 +03:00 [INF] Executed DbCommand (1ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT "MigrationId", "ProductVersion"
+FROM "__EFMigrationsHistory"
+ORDER BY "MigrationId";
+2025-11-29 15:44:25.532 +03:00 [INF] No migrations were applied. The database is already up to date.
+2025-11-29 15:44:25.534 +03:00 [INF] ✅ Veritabanı başarıyla güncellendi.
+2025-11-29 15:44:25.822 +03:00 [INF] Now listening on: https://localhost:7061
+2025-11-29 15:44:25.824 +03:00 [INF] Now listening on: http://localhost:5180
+2025-11-29 15:44:26.317 +03:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-11-29 15:44:26.321 +03:00 [INF] Hosting environment: Development
+2025-11-29 15:44:26.325 +03:00 [INF] Content root path: C:\Users\afneysoftware\Desktop\BusX\BusX.API
+2025-11-29 15:44:26.627 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/swagger/index.html - null null
+2025-11-29 15:44:26.882 +03:00 [INF] HTTP GET /swagger/index.html responded 200 in 90.7794 ms
+2025-11-29 15:44:26.900 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/_vs/browserLink - null null
+2025-11-29 15:44:26.900 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/_framework/aspnetcore-browser-refresh.js - null null
+2025-11-29 15:44:26.900 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/swagger/index.html - 200 null text/html;charset=utf-8 292.6825ms
+2025-11-29 15:44:26.948 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/_framework/aspnetcore-browser-refresh.js - 200 13752 application/javascript; charset=utf-8 48.6463ms
+2025-11-29 15:44:26.987 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/_vs/browserLink - 200 null text/javascript; charset=UTF-8 88.0641ms
+2025-11-29 15:44:27.056 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/swagger/v1/swagger.json - null null
+2025-11-29 15:44:27.068 +03:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 6.3673 ms
+2025-11-29 15:44:27.071 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/swagger/v1/swagger.json - 200 null application/json;charset=utf-8 15.6122ms
+2025-11-29 15:45:34.247 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/api/health - null null
+2025-11-29 15:45:34.270 +03:00 [INF] HTTP GET /api/health responded 404 in 2.0037 ms
+2025-11-29 15:45:34.274 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/api/health - 404 0 null 63.2769ms
+2025-11-29 15:45:34.281 +03:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET https://localhost:7061/api/health, Response status code: 404
+2025-11-29 15:45:51.515 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/health - null null
+2025-11-29 15:45:51.527 +03:00 [INF] Executing endpoint 'Health checks'
+2025-11-29 15:45:51.585 +03:00 [INF] Executed endpoint 'Health checks'
+2025-11-29 15:45:51.589 +03:00 [INF] HTTP GET /health responded 200 in 64.0891 ms
+2025-11-29 15:45:51.591 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/health - 200 null text/plain 76.3036ms
+2025-11-29 15:46:52.683 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/api/Journeys/1/seats - null null
+2025-11-29 15:46:52.697 +03:00 [INF] Executing endpoint 'BusX.API.Controllers.JourneysController.GetSeats (BusX.API)'
+2025-11-29 15:46:52.721 +03:00 [INF] Route matched with {action = "GetSeats", controller = "Journeys"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetSeats(Int32) on controller BusX.API.Controllers.JourneysController (BusX.API).
+2025-11-29 15:46:53.070 +03:00 [INF] Executed DbCommand (4ms) [Parameters=[@__p_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "j"."Id", "j"."ArrivalEstimate", "j"."BasePrice", "j"."CreatedAt", "j"."Departure", "j"."FromStationId", "j"."ProviderName", "j"."ToStationId"
+FROM "Journeys" AS "j"
+WHERE "j"."Id" = @__p_0
+LIMIT 1
+2025-11-29 15:46:53.139 +03:00 [INF] Executed DbCommand (0ms) [Parameters=[@__journeyId_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "s"."Id", "s"."Column", "s"."CreatedAt", "s"."GenderLock", "s"."IsSold", "s"."JourneyId", "s"."Row", "s"."RowVersion", "s"."SeatNumber", "s"."Type"
+FROM "Seats" AS "s"
+WHERE "s"."JourneyId" = @__journeyId_0
+ORDER BY "s"."SeatNumber"
+2025-11-29 15:46:53.184 +03:00 [INF] Executing OkObjectResult, writing value of type 'System.Collections.Generic.List`1[[BusX.Core.DTOs.SeatDto, BusX.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+2025-11-29 15:46:53.214 +03:00 [INF] Executed action BusX.API.Controllers.JourneysController.GetSeats (BusX.API) in 477.7908ms
+2025-11-29 15:46:53.218 +03:00 [INF] Executed endpoint 'BusX.API.Controllers.JourneysController.GetSeats (BusX.API)'
+2025-11-29 15:46:53.220 +03:00 [INF] HTTP GET /api/Journeys/1/seats responded 200 in 523.0904 ms
+2025-11-29 15:46:53.224 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/api/Journeys/1/seats - 200 null application/json; charset=utf-8 541.7706ms
+2025-11-29 15:47:06.742 +03:00 [INF] Request starting HTTP/2 GET https://localhost:7061/api/Journeys/1 - null null
+2025-11-29 15:47:06.757 +03:00 [INF] Executing endpoint 'BusX.API.Controllers.JourneysController.GetById (BusX.API)'
+2025-11-29 15:47:06.764 +03:00 [INF] Route matched with {action = "GetById", controller = "Journeys"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetById(Int32) on controller BusX.API.Controllers.JourneysController (BusX.API).
+2025-11-29 15:47:06.817 +03:00 [INF] Executed DbCommand (0ms) [Parameters=[@__id_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "j"."Id", "j"."ArrivalEstimate", "j"."BasePrice", "j"."CreatedAt", "j"."Departure", "j"."FromStationId", "j"."ProviderName", "j"."ToStationId", "s"."Id", "s"."City", "s"."CreatedAt", "s"."Name", "s0"."Id", "s0"."City", "s0"."CreatedAt", "s0"."Name"
+FROM "Journeys" AS "j"
+INNER JOIN "Stations" AS "s" ON "j"."FromStationId" = "s"."Id"
+INNER JOIN "Stations" AS "s0" ON "j"."ToStationId" = "s0"."Id"
+WHERE "j"."Id" = @__id_0
+LIMIT 1
+2025-11-29 15:47:06.842 +03:00 [INF] Executing OkObjectResult, writing value of type 'BusX.Core.DTOs.JourneyDto'.
+2025-11-29 15:47:06.852 +03:00 [INF] Executed action BusX.API.Controllers.JourneysController.GetById (BusX.API) in 84.7737ms
+2025-11-29 15:47:06.858 +03:00 [INF] Executed endpoint 'BusX.API.Controllers.JourneysController.GetById (BusX.API)'
+2025-11-29 15:47:06.860 +03:00 [INF] HTTP GET /api/Journeys/1 responded 200 in 103.5787 ms
+2025-11-29 15:47:06.862 +03:00 [INF] Request finished HTTP/2 GET https://localhost:7061/api/Journeys/1 - 200 null application/json; charset=utf-8 120.4053ms

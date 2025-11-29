@@ -2,35 +2,62 @@ using BusX.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using BusX.Core.Interfaces;
 using BusX.Infrastructure.Services;
+using Serilog;
+using BusX.API.Middlewares;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ============================================================
+// 1. SERILOG AYARLARI (Kara Kutu) 📝
+// ============================================================
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext() // Correlation ID buradan gelecek
+    .WriteTo.Console()       // Konsola yaz
+    .WriteTo.File("logs/busx-.txt", rollingInterval: RollingInterval.Day) // Dosyaya yaz (Günlük)
+    .CreateLogger();
+
+builder.Host.UseSerilog(); // .NET'in log mekanizmasını Serilog ile değiştir
+
 // Add services to the container.
 
-// 1. Veritabanı Bağlantısı
-// Not: ConnectionString appsettings.json dosyasından gelir.
+// Veritabanı
 builder.Services.AddDbContext<BusXDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Cache Servisini Aktif Et (IMemoryCache)
+// Cache
 builder.Services.AddMemoryCache();
 
-// 3. Provider Stratejilerini Ekle (Strategy Pattern)
+// Servisler & Stratejiler
 builder.Services.AddScoped<IPriceStrategy, ProviderAStrategy>();
 builder.Services.AddScoped<IPriceStrategy, ProviderBStrategy>();
-
-// 4. Journey Servisini Ekle
 builder.Services.AddScoped<IJourneyService, JourneyService>();
 
-builder.Services.AddControllers();
+// ============================================================
+// 2. HEALTH CHECK (Sistem Nabzı) ❤️
+// ============================================================
+// Sadece "API ayakta mı?" diye bakmaz, "Veritabanına bağlanabiliyor muyum?" diye de bakar.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<BusXDbContext>();
 
-// Swagger/OpenAPI konfigürasyonu
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// ============================================================
+// 3. MIDDLEWARE SIRALAMASI (Önemli!)
+// ============================================================
+
+// Correlation ID Middleware (En başa yakın olmalı)
+app.UseMiddleware<CorrelationIdMiddleware>();
+
+// Her isteği logla (Serilog Request Logging)
+app.UseSerilogRequestLogging();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -38,34 +65,29 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
+
+// Health Check Endpoint'i
+app.MapHealthChecks("/health");
 
 app.MapControllers();
 
 // ============================================================
-// 🚑 SELF-HEALING: Otomatik Veritabanı Kurulumu ve Migration
+// 4. OTOMATİK MIGRATION
 // ============================================================
-// Uygulama ayağa kalkmadan önce veritabanının varlığından emin oluyoruz.
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<BusXDbContext>();
-
-        // Bu komut, henüz uygulanmamış migration'ları veritabanına uygular.
-        // Veritabanı yoksa oluşturur (BusX.db).
         context.Database.Migrate();
-
-        Console.WriteLine("✅ Veritabanı başarıyla güncellendi ve seed datalar kontrol edildi.");
+        Log.Information("✅ Veritabanı başarıyla güncellendi.");
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "❌ Veritabanı oluşturulurken kritik bir hata oluştu.");
+        Log.Error(ex, "❌ Veritabanı başlatılırken hata oluştu.");
     }
 }
-// ============================================================
 
 app.Run();
