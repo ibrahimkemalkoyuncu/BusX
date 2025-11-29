@@ -2,24 +2,29 @@
 
 Atlas Yazılım için geliştirilen, yüksek performanslı, ölçeklenebilir ve eşzamanlılık (concurrency) sorunlarını çözen modern bir otobüs biletleme altyapısıdır.
 
-## 🚀 Proje Durumu: Modül 2 Tamamlandı (Koltuk Planı)
-Şu anki sürüm **"Modül 2"** olup, aşağıdaki özellikleri içerir:
+## 🚀 Proje Durumu: Modül 3 Tamamlandı (Satış & Concurrency)
+Şu anki sürüm **"Modül 3"** olup, aşağıdaki kritik özellikleri içerir:
 
 ### 🏗️ Mimari & Teknolojiler
 * **.NET 8 Web API:** Backend motoru.
 * **Clean Architecture:** Core, Infrastructure ve API katmanlı yapı.
 * **SQLite & EF Core:** Veritabanı ve ORM.
-* **Lazy Loading Pattern:** Koltuklar veritabanında peşinen değil, sefer ilk kez sorgulandığında dinamik olarak oluşturulur (Database Optimization).
-* **Strategy Pattern:** Farklı sağlayıcılar (ProviderA/B) için dinamik fiyat hesaplama.
-* **Concurrency Control:** (Hazırlık aşamasında) Optimistic Locking altyapısı.
+* **Optimistic Concurrency Control:** Aynı koltuğun aynı anda iki kişiye satılmasını önleyen kilit mekanizması (`RowVersion`).
+* **Transaction Management:** Satış ve ödeme işlemlerinin atomik (ya hep ya hiç) olarak yönetilmesi.
+* **Lazy Loading Pattern:** Koltuklar dinamik oluşturulur.
+* **Strategy Pattern:** Sağlayıcı bazlı fiyatlandırma.
 
 ### 🔌 Endpoint'ler
 | Metot | URL | Açıklama |
 |-------|-----|----------|
 | `GET` | `/api/journeys` | Şehirler arası sefer arama (Cache destekli). |
 | `GET` | `/api/journeys/{id}` | Sefer detayını getirme. |
-| `GET` | `/api/journeys/{id}/seats` | **(Yeni)** Seferin anlık koltuk durumunu (Dolu/Boş) getirir. |
-| `POST` | `/api/tickets/checkout` | **(Yeni)** Bilet satışı ve rezervasyon işlemi. |
+| `GET` | `/api/journeys/{id}/seats` | Seferin anlık koltuk durumunu (Dolu/Boş) getirir. |
+| `POST` | `/api/tickets/checkout` | **(Yeni)** Güvenli bilet satışı. Eşzamanlılık kontrolü ve Mock ödeme içerir. |
+
+### 🧪 Test Senaryoları
+* **Mock Ödeme:** %10 ihtimalle ödeme reddedilir (402 Payment Required).
+* **Çifte Rezervasyon:** Aynı koltuğa aynı anda gelen isteklerden sadece biri başarılı olur, diğeri reddedilir (409 Conflict).
 
 ---
 
